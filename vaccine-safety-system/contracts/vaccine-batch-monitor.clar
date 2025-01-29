@@ -1,4 +1,5 @@
 ;; Vaccine Tracking Smart Contract
+
 ;; Contract Owner Management
 (define-data-var immunization-system-controller principal tx-sender)
 
@@ -19,6 +20,7 @@
 (define-constant DATA-VALIDATION-ERROR (err u113))
 (define-constant EXPIRY-DATE-ERROR (err u114))
 (define-constant STORAGE-CAPACITY-ERROR (err u115))
+(define-constant CLINICIAN-ALREADY-REGISTERED (err u116))
 
 ;; Constants
 (define-constant COLD-CHAIN-MINIMUM-TEMP (- 70))
@@ -131,6 +133,7 @@
 (define-public (transfer-system-control (new-controller principal))
     (begin
         (asserts! (is-system-controller) ADMIN-PRIVILEGES-REQUIRED)
+        (asserts! (is-some (map-get? authorized-clinicians new-controller)) AUTHORIZATION-ERROR)
         (ok (var-set immunization-system-controller new-controller))
     )
 )
@@ -142,6 +145,7 @@
     (credential-expiry uint))
     (begin
         (asserts! (is-system-controller) AUTHORIZATION-ERROR)
+        (asserts! (is-none (map-get? authorized-clinicians clinician-address)) CLINICIAN-ALREADY-REGISTERED)
         (asserts! (validate-identifier role) DATA-VALIDATION-ERROR)
         (asserts! (validate-location-field facility-name) DATA-VALIDATION-ERROR)
         (asserts! (validate-future-date credential-expiry) EXPIRY-DATE-ERROR)
@@ -339,7 +343,8 @@
 )
 
 (define-read-only (verify-vaccine-validity (shipment-id (string-ascii 32)))
-    (match (map-get? vaccine-shipment-registry {shipment-id: shipment-id})
+    (
+match (map-get? vaccine-shipment-registry {shipment-id: shipment-id})
         shipment-data (and
             (is-eq (get shipment-status shipment-data) "active")
             (> (get available-unit-count shipment-data) u0)
@@ -347,9 +352,4 @@
             (<= (get temp-violation-incidents shipment-data) u2))
         false
     )
-)
-
-;; String validation function for 20-character strings
-(define-private (validate-status-field (input (string-ascii 20)))
-    (> (len input) MINIMUM-ENTRY-LENGTH)
 )
